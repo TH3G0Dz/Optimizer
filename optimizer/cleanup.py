@@ -11,7 +11,7 @@ def review_file(path: Path) -> FileReview:
     if path.is_symlink():
         raise ValueError("Links não podem ser excluídos nesta versão.")
     if not path.is_file():
-        raise IsADirectoryError("Somente arquivos podem ser enviados à Lixeira nesta versão.")
+        raise IsADirectoryError("Somente arquivos podem ser excluídos nesta versão.")
 
     result = classify(path)
     if result.importance is Importance.CRITICAL:
