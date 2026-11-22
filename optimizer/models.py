@@ -32,3 +32,10 @@ class InstalledApp:
     version: str
     location: str
 
+
+@dataclass(frozen=True)
+class FileReview:
+    path: Path
+    size: int
+    classification: Classification
+

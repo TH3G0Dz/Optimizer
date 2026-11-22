@@ -7,9 +7,12 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Exibe discos, pastas e arquivos em uma árvore carregada sob demanda.
 - Mostra tamanho, importância estimada e motivo da classificação.
 - Continua navegando quando encontra pastas sem permissão.
+- Revisa um arquivo selecionado antes de qualquer ação.
+- Envia arquivos aprovados para a Lixeira após confirmação explícita.
+- Bloqueia pastas, links, áreas críticas e volumes sem proteção adequada.
 - Lista aplicativos registrados no Windows.
 - Abre a tela oficial de desinstalação do Windows.
-- Não exclui arquivos nem resíduos nesta versão.
+- Não esvazia a Lixeira nem remove resíduos nesta versão.
 
 ## Classificação
 
@@ -52,6 +55,8 @@ O executável será criado em `dist\Optimizer.exe`.
 3. Criar quarentena restaurável e diário de operações.
 4. Desinstalar pelo mecanismo oficial antes de oferecer resíduos.
 5. Adicionar assinatura de código e instalador do Windows.
+
+Veja [ROADMAP.md](ROADMAP.md) para ideias de otimização priorizadas.
 
 ## Segurança e privacidade
 
