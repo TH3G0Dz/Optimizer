@@ -1,10 +1,10 @@
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .apps import list_installed_apps, open_windows_apps_settings
-from .cleanup import move_to_recycle_bin, review_file
+from .cleanup import delete_file, review_file
 from .importance import classify
 from .scanner import format_size, list_children, list_drives
 
@@ -25,7 +25,7 @@ class OptimizerApp(tk.Tk):
         header = ttk.Frame(self, padding=12)
         header.pack(fill="x")
         ttk.Label(header, text="Optimizer", font=("Segoe UI", 20, "bold")).pack(side="left")
-        ttk.Label(header, text="Exclusão somente após revisão e confirmação.").pack(side="right")
+        ttk.Label(header, text="Exclusão permanente somente após revisão e confirmação.").pack(side="right")
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=12, pady=(0, 8))
@@ -159,33 +159,35 @@ class OptimizerApp(tk.Tk):
             ttk.Label(content, text=f"{label}:", font=("Segoe UI", 9, "bold")).grid(row=row, column=0, sticky="nw", pady=4)
             ttk.Label(content, text=value, wraplength=620).grid(row=row, column=1, sticky="w", padx=(12, 0), pady=4)
         ttk.Separator(content).grid(row=len(rows), column=0, columnspan=2, sticky="ew", pady=12)
-        ttk.Label(content, text="O arquivo será enviado à Lixeira do Windows. Confirme somente se reconhece o arquivo.", wraplength=700).grid(
+        ttk.Label(content, text="A exclusão será permanente. Confirme somente se reconhece o arquivo.", wraplength=700).grid(
             row=len(rows) + 1, column=0, columnspan=2, sticky="w"
         )
         buttons = ttk.Frame(content)
         buttons.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="e", pady=(16, 0))
         ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Mover para a Lixeira", command=lambda: self._confirm_delete(dialog, item, review.path)).pack(side="left")
+        ttk.Button(buttons, text="Excluir permanentemente", command=lambda: self._confirm_delete(dialog, item, review.path)).pack(side="left")
 
     def _confirm_delete(self, dialog: tk.Toplevel, item: str, path: Path) -> None:
-        confirmed = messagebox.askyesno(
-            "Confirmar envio à Lixeira",
-            f"Mover este arquivo para a Lixeira?\n\n{path}\n\nO Optimizer não esvaziará a Lixeira.",
-            icon="warning",
+        typed_name = simpledialog.askstring(
+            "Confirmar exclusão permanente",
+            f"Esta ação não pode ser desfeita.\n\nDigite o nome exato para excluir:\n{path.name}",
             parent=dialog,
         )
-        if not confirmed:
+        if typed_name is None:
+            return
+        if typed_name != path.name:
+            messagebox.showerror("Optimizer", "O nome digitado não corresponde ao arquivo.", parent=dialog)
             return
         try:
-            move_to_recycle_bin(path)
+            delete_file(path)
         except OSError as error:
             messagebox.showerror("Optimizer", str(error), parent=dialog)
             return
         self.paths.pop(item, None)
         self.file_tree.delete(item)
         dialog.destroy()
-        self.status.set(f"Enviado à Lixeira: {path}")
-        messagebox.showinfo("Optimizer", "Arquivo enviado à Lixeira.", parent=self)
+        self.status.set(f"Excluído permanentemente: {path}")
+        messagebox.showinfo("Optimizer", "Arquivo excluído permanentemente.", parent=self)
 
     def _load_apps(self) -> None:
         self.status.set("Lendo aplicativos registrados...")

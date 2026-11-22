@@ -5,7 +5,7 @@
 1. Localizar arquivos grandes e antigos com filtros claros.
 2. Detectar duplicados por tamanho e hash, sem comparar conteúdo desnecessariamente.
 3. Medir o espaço recuperável antes de qualquer ação.
-4. Registrar operações e facilitar restauração pela Lixeira.
+4. Criar quarentena restaurável e diário de operações.
 5. Detectar resíduos somente após o desinstalador oficial terminar.
 
 ## Armazenamento

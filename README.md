@@ -8,11 +8,11 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Mostra tamanho, importância estimada e motivo da classificação.
 - Continua navegando quando encontra pastas sem permissão.
 - Revisa um arquivo selecionado antes de qualquer ação.
-- Envia arquivos aprovados para a Lixeira após confirmação explícita.
-- Bloqueia pastas, links, áreas críticas e volumes sem proteção adequada.
+- Exclui arquivos aprovados após exigir o nome exato como confirmação.
+- Bloqueia pastas, links e áreas críticas.
 - Lista aplicativos registrados no Windows.
 - Abre a tela oficial de desinstalação do Windows.
-- Não esvazia a Lixeira nem remove resíduos nesta versão.
+- Não remove pastas nem resíduos nesta versão.
 
 ## Classificação
 
@@ -22,7 +22,7 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - **Baixo:** caches e temporários fora de áreas protegidas.
 - **Revisar:** origem ou impacto não identificado.
 
-Classificação é uma estimativa. `Baixo` não significa autorização automática para excluir.
+Classificação é uma estimativa. `Baixo` não significa autorização automática para excluir. A exclusão é permanente.
 
 ## Executar pelo código
 

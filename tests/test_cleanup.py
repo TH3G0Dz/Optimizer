@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from optimizer.cleanup import move_to_recycle_bin, review_file
+from optimizer.cleanup import delete_file, review_file
 from optimizer.models import Classification, Importance
 
 
@@ -29,24 +29,12 @@ class CleanupTests(unittest.TestCase):
             with patch("optimizer.cleanup.classify", return_value=critical), self.assertRaises(PermissionError):
                 review_file(path)
 
-    def test_recycle_uses_validated_fixed_drive_file(self) -> None:
+    def test_deletes_reviewed_file(self) -> None:
         with tempfile.TemporaryDirectory(dir="D:\\Optimizer") as folder:
             path = Path(folder, "candidate.bin")
             path.touch()
-            with patch("optimizer.cleanup._is_fixed_drive", return_value=False):
-                with self.assertRaisesRegex(OSError, "volume"):
-                    move_to_recycle_bin(path)
-
-    def test_recycle_calls_windows_for_fixed_drive_file(self) -> None:
-        with tempfile.TemporaryDirectory(dir="D:\\Optimizer") as folder:
-            path = Path(folder, "candidate.bin")
-            path.touch()
-            with (
-                patch("optimizer.cleanup._is_fixed_drive", return_value=True),
-                patch("optimizer.cleanup.ctypes.windll.shell32.SHFileOperationW", return_value=0) as operation,
-            ):
-                move_to_recycle_bin(path)
-            operation.assert_called_once()
+            delete_file(path)
+            self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
