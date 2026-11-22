@@ -1,0 +1,26 @@
+name: Build Windows executable
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Install builder
+        run: python -m pip install -r requirements-build.txt
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name Optimizer main.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Optimizer-Windows
+          path: dist/Optimizer.exe
+
