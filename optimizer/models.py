@@ -39,3 +39,10 @@ class FileReview:
     size: int
     classification: Classification
 
+
+@dataclass(frozen=True)
+class DriveUsage:
+    path: Path
+    total: int
+    used: int
+    free: int

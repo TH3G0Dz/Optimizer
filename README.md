@@ -7,11 +7,13 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Exibe discos, pastas e arquivos em uma árvore carregada sob demanda.
 - Mostra tamanho, importância estimada e motivo da classificação.
 - Continua navegando quando encontra pastas sem permissão.
-- Revisa um arquivo selecionado antes de qualquer ação.
-- Exclui arquivos aprovados após exigir o nome exato como confirmação.
+- Permite selecionar e revisar vários arquivos antes de qualquer ação.
+- Exclui o lote após uma única confirmação `Sim/Não`.
 - Bloqueia pastas, links e áreas críticas.
 - Lista aplicativos registrados no Windows.
 - Abre a tela oficial de desinstalação do Windows.
+- Mostra espaço total, usado e livre por unidade.
+- Abre armazenamento, inicialização, Gerenciador de Tarefas e otimização de unidades do Windows.
 - Não remove pastas nem resíduos nesta versão.
 
 ## Classificação
@@ -22,7 +24,7 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - **Baixo:** caches e temporários fora de áreas protegidas.
 - **Revisar:** origem ou impacto não identificado.
 
-Classificação é uma estimativa. `Baixo` não significa autorização automática para excluir. A exclusão é permanente.
+Classificação é uma estimativa. `Baixo` não significa autorização automática para excluir. A exclusão em lote é permanente.
 
 ## Executar pelo código
 

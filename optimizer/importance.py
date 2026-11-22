@@ -3,7 +3,6 @@ from pathlib import Path
 
 from .models import Classification, Importance
 
-
 PERSONAL_FOLDERS = {"desktop", "documents", "downloads", "music", "pictures", "videos"}
 PERSONAL_EXTENSIONS = {
     ".doc",
@@ -41,7 +40,9 @@ def _is_within(path: str, root: str | None) -> bool:
         return False
 
 
-def classify(path: Path, *, is_dir: bool = False, is_link: bool = False) -> Classification:
+def classify(
+    path: Path, *, is_dir: bool = False, is_link: bool = False
+) -> Classification:
     normalized = _normalized(path)
     protected_roots = (
         os.environ.get("WINDIR", r"C:\Windows"),
@@ -51,21 +52,34 @@ def classify(path: Path, *, is_dir: bool = False, is_link: bool = False) -> Clas
     )
 
     if is_link:
-        return Classification(Importance.REVIEW, "Atalho ou ligação; o destino precisa ser verificado.")
+        return Classification(
+            Importance.REVIEW, "Atalho ou ligação; o destino precisa ser verificado."
+        )
     if any(_is_within(normalized, root) for root in protected_roots):
-        return Classification(Importance.CRITICAL, "Área do Windows ou de programas instalados.")
+        return Classification(
+            Importance.CRITICAL, "Área do Windows ou de programas instalados."
+        )
 
     parts = {part.casefold() for part in path.parts}
     suffix = path.suffix.casefold()
     if parts & PERSONAL_FOLDERS or suffix in PERSONAL_EXTENSIONS:
-        return Classification(Importance.HIGH, "Arquivo pessoal ou conteúdo difícil de recriar.")
+        return Classification(
+            Importance.HIGH, "Arquivo pessoal ou conteúdo difícil de recriar."
+        )
     if suffix in EXECUTABLE_EXTENSIONS:
-        return Classification(Importance.HIGH, "Executável, instalador ou componente de software.")
+        return Classification(
+            Importance.HIGH, "Executável, instalador ou componente de software."
+        )
     if parts & CACHE_PARTS:
-        return Classification(Importance.LOW, "Cache ou temporário provável; confirme se está em uso.")
+        return Classification(
+            Importance.LOW, "Cache ou temporário provável; confirme se está em uso."
+        )
     if suffix in DATA_EXTENSIONS:
-        return Classification(Importance.MEDIUM, "Configuração ou banco de dados local.")
+        return Classification(
+            Importance.MEDIUM, "Configuração ou banco de dados local."
+        )
     if is_dir:
-        return Classification(Importance.REVIEW, "Pasta ainda não analisada por contexto.")
+        return Classification(
+            Importance.REVIEW, "Pasta ainda não analisada por contexto."
+        )
     return Classification(Importance.REVIEW, "Impacto não identificado com confiança.")
-

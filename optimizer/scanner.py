@@ -9,7 +9,11 @@ from .models import FileEntry
 def list_drives() -> list[Path]:
     if hasattr(os, "listdrives"):
         return [Path(drive) for drive in os.listdrives()]
-    return [Path(f"{letter}:\\") for letter in string.ascii_uppercase if Path(f"{letter}:\\").exists()]
+    return [
+        Path(f"{letter}:\\")
+        for letter in string.ascii_uppercase
+        if Path(f"{letter}:\\").exists()
+    ]
 
 
 def list_children(folder: Path) -> list[FileEntry]:
@@ -25,8 +29,14 @@ def list_children(folder: Path) -> list[FileEntry]:
                 is_link = True
                 size = None
             path = Path(item.path)
-            entries.append(FileEntry(path, is_dir, size, classify(path, is_dir=is_dir, is_link=is_link)))
-    return sorted(entries, key=lambda entry: (not entry.is_dir, entry.path.name.casefold()))
+            entries.append(
+                FileEntry(
+                    path, is_dir, size, classify(path, is_dir=is_dir, is_link=is_link)
+                )
+            )
+    return sorted(
+        entries, key=lambda entry: (not entry.is_dir, entry.path.name.casefold())
+    )
 
 
 def format_size(size: int | None) -> str:
@@ -38,4 +48,3 @@ def format_size(size: int | None) -> str:
             return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
         value /= 1024
     return ""
-

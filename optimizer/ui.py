@@ -1,12 +1,19 @@
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 
 from .apps import list_installed_apps, open_windows_apps_settings
-from .cleanup import delete_file, review_file
+from .cleanup import delete_files, review_files
 from .importance import classify
 from .scanner import format_size, list_children, list_drives
+from .system import (
+    list_drive_usage,
+    open_optimize_drives,
+    open_startup_settings,
+    open_storage_settings,
+    open_task_manager,
+)
 
 
 class OptimizerApp(tk.Tk):
@@ -24,30 +31,46 @@ class OptimizerApp(tk.Tk):
     def _build_ui(self) -> None:
         header = ttk.Frame(self, padding=12)
         header.pack(fill="x")
-        ttk.Label(header, text="Optimizer", font=("Segoe UI", 20, "bold")).pack(side="left")
-        ttk.Label(header, text="Exclusão permanente somente após revisão e confirmação.").pack(side="right")
+        ttk.Label(header, text="Optimizer", font=("Segoe UI", 20, "bold")).pack(
+            side="left"
+        )
+        ttk.Label(
+            header, text="Exclusão permanente somente após revisão e confirmação."
+        ).pack(side="right")
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         files_tab = ttk.Frame(notebook)
         apps_tab = ttk.Frame(notebook)
+        optimization_tab = ttk.Frame(notebook)
         notebook.add(files_tab, text="Arquivos")
         notebook.add(apps_tab, text="Aplicativos")
+        notebook.add(optimization_tab, text="Otimização")
         self._build_files_tab(files_tab)
         self._build_apps_tab(apps_tab)
+        self._build_optimization_tab(optimization_tab)
         ttk.Label(self, textvariable=self.status, padding=(12, 4)).pack(fill="x")
 
     def _build_files_tab(self, parent: ttk.Frame) -> None:
         actions = ttk.Frame(parent, padding=8)
         actions.pack(fill="x")
-        self.review_button = ttk.Button(actions, text="Revisar arquivo selecionado", command=self._review_selected, state="disabled")
+        self.review_button = ttk.Button(
+            actions,
+            text="Revisar arquivos selecionados",
+            command=self._review_selected,
+            state="disabled",
+        )
         self.review_button.pack(side="left")
-        ttk.Label(actions, text="Pastas e arquivos críticos permanecem protegidos.").pack(side="right")
+        ttk.Label(
+            actions, text="Pastas e arquivos críticos permanecem protegidos."
+        ).pack(side="right")
 
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill="both", expand=True)
         columns = ("size", "importance", "reason")
-        self.file_tree = ttk.Treeview(tree_frame, columns=columns, show="tree headings")
+        self.file_tree = ttk.Treeview(
+            tree_frame, columns=columns, show="tree headings", selectmode="extended"
+        )
         self.file_tree.heading("#0", text="Pasta ou arquivo")
         self.file_tree.heading("size", text="Tamanho")
         self.file_tree.heading("importance", text="Importância")
@@ -56,7 +79,9 @@ class OptimizerApp(tk.Tk):
         self.file_tree.column("size", width=100, anchor="e")
         self.file_tree.column("importance", width=100, anchor="center")
         self.file_tree.column("reason", width=450)
-        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.file_tree.yview)
+        scrollbar = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self.file_tree.yview
+        )
         self.file_tree.configure(yscrollcommand=scrollbar.set)
         self.file_tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -66,9 +91,17 @@ class OptimizerApp(tk.Tk):
     def _build_apps_tab(self, parent: ttk.Frame) -> None:
         actions = ttk.Frame(parent, padding=8)
         actions.pack(fill="x")
-        ttk.Button(actions, text="Carregar aplicativos", command=self._load_apps).pack(side="left")
-        ttk.Button(actions, text="Abrir desinstalação do Windows", command=self._open_apps_settings).pack(side="left", padx=8)
-        ttk.Label(actions, text="Resíduos serão analisados em uma versão futura.").pack(side="right")
+        ttk.Button(actions, text="Carregar aplicativos", command=self._load_apps).pack(
+            side="left"
+        )
+        ttk.Button(
+            actions,
+            text="Abrir desinstalação do Windows",
+            command=self._open_apps_settings,
+        ).pack(side="left", padx=8)
+        ttk.Label(actions, text="Resíduos serão analisados em uma versão futura.").pack(
+            side="right"
+        )
         columns = ("publisher", "version", "location")
         self.apps_tree = ttk.Treeview(parent, columns=columns, show="tree headings")
         self.apps_tree.heading("#0", text="Aplicativo")
@@ -81,10 +114,48 @@ class OptimizerApp(tk.Tk):
         self.apps_tree.column("location", width=450)
         self.apps_tree.pack(fill="both", expand=True)
 
+    def _build_optimization_tab(self, parent: ttk.Frame) -> None:
+        actions = ttk.Frame(parent, padding=8)
+        actions.pack(fill="x")
+        ttk.Button(
+            actions, text="Atualizar discos", command=self._load_drive_usage
+        ).pack(side="left")
+        ttk.Button(
+            actions,
+            text="Armazenamento do Windows",
+            command=self._open_storage_settings,
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            actions, text="Apps de inicialização", command=self._open_startup_settings
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            actions, text="Gerenciador de Tarefas", command=self._open_task_manager
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            actions, text="Otimizar unidades", command=self._open_optimize_drives
+        ).pack(side="left", padx=4)
+        columns = ("total", "used", "free", "percent")
+        self.drives_tree = ttk.Treeview(parent, columns=columns, show="tree headings")
+        self.drives_tree.heading("#0", text="Unidade")
+        self.drives_tree.heading("total", text="Total")
+        self.drives_tree.heading("used", text="Usado")
+        self.drives_tree.heading("free", text="Livre")
+        self.drives_tree.heading("percent", text="Uso")
+        self.drives_tree.column("#0", width=240)
+        for column in columns:
+            self.drives_tree.column(column, width=140, anchor="e")
+        self.drives_tree.pack(fill="both", expand=True)
+        self._load_drive_usage()
+
     def _load_drives(self) -> None:
         for drive in list_drives():
             result = classify(drive, is_dir=True)
-            item = self.file_tree.insert("", "end", text=str(drive), values=("", result.importance.value, result.reason))
+            item = self.file_tree.insert(
+                "",
+                "end",
+                text=str(drive),
+                values=("", result.importance.value, result.reason),
+            )
             self.paths[item] = drive
             self.file_tree.insert(item, "end", text="Carregando...")
 
@@ -94,7 +165,9 @@ class OptimizerApp(tk.Tk):
             return
         self.loaded.add(item)
         self.status.set(f"Lendo {self.paths[item]}...")
-        threading.Thread(target=self._read_folder, args=(item, self.paths[item]), daemon=True).start()
+        threading.Thread(
+            target=self._read_folder, args=(item, self.paths[item]), daemon=True
+        ).start()
 
     def _read_folder(self, item: str, path: Path) -> None:
         try:
@@ -107,7 +180,9 @@ class OptimizerApp(tk.Tk):
         for child in self.file_tree.get_children(parent):
             self.file_tree.delete(child)
         if error:
-            self.file_tree.insert(parent, "end", text="Acesso indisponível", values=("", "Revisar", error))
+            self.file_tree.insert(
+                parent, "end", text="Acesso indisponível", values=("", "Revisar", error)
+            )
             self.status.set(error)
             return
         for entry in entries:
@@ -115,7 +190,11 @@ class OptimizerApp(tk.Tk):
                 parent,
                 "end",
                 text=entry.path.name or str(entry.path),
-                values=(format_size(entry.size), entry.classification.importance.value, entry.classification.reason),
+                values=(
+                    format_size(entry.size),
+                    entry.classification.importance.value,
+                    entry.classification.reason,
+                ),
             )
             self.paths[item] = entry.path
             if entry.is_dir:
@@ -124,20 +203,27 @@ class OptimizerApp(tk.Tk):
 
     def _on_select(self, _event=None) -> None:
         selected = self.file_tree.selection()
-        if selected and selected[0] in self.paths:
-            path = self.paths[selected[0]]
-            self.review_button.configure(state="normal" if path.is_file() and not path.is_symlink() else "disabled")
-            self.status.set(str(path))
-        else:
-            self.review_button.configure(state="disabled")
+        paths = [self.paths[item] for item in selected if item in self.paths]
+        can_review = (
+            bool(paths)
+            and len(paths) == len(selected)
+            and all(path.is_file() and not path.is_symlink() for path in paths)
+        )
+        self.review_button.configure(state="normal" if can_review else "disabled")
+        if paths:
+            self.status.set(
+                str(paths[0])
+                if len(paths) == 1
+                else f"{len(paths)} arquivos selecionados."
+            )
 
     def _review_selected(self) -> None:
         selected = self.file_tree.selection()
-        if not selected or selected[0] not in self.paths:
+        items = [item for item in selected if item in self.paths]
+        if not items:
             return
-        item = selected[0]
         try:
-            review = review_file(self.paths[item])
+            reviews = review_files(self.paths[item] for item in items)
         except (OSError, ValueError) as error:
             messagebox.showerror("Optimizer", str(error), parent=self)
             return
@@ -149,45 +235,124 @@ class OptimizerApp(tk.Tk):
         dialog.grab_set()
         content = ttk.Frame(dialog, padding=18)
         content.pack(fill="both", expand=True)
-        rows = (
-            ("Arquivo", str(review.path)),
-            ("Tamanho", format_size(review.size)),
-            ("Importância", review.classification.importance.value),
-            ("Motivo", review.classification.reason),
+        total_size = sum(review.size for review in reviews)
+        ttk.Label(
+            content,
+            text=f"{len(reviews)} arquivo(s) • {format_size(total_size)}",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        review_tree = ttk.Treeview(
+            content,
+            columns=("size", "importance", "reason"),
+            show="tree headings",
+            height=min(12, len(reviews)),
         )
-        for row, (label, value) in enumerate(rows):
-            ttk.Label(content, text=f"{label}:", font=("Segoe UI", 9, "bold")).grid(row=row, column=0, sticky="nw", pady=4)
-            ttk.Label(content, text=value, wraplength=620).grid(row=row, column=1, sticky="w", padx=(12, 0), pady=4)
-        ttk.Separator(content).grid(row=len(rows), column=0, columnspan=2, sticky="ew", pady=12)
-        ttk.Label(content, text="A exclusão será permanente. Confirme somente se reconhece o arquivo.", wraplength=700).grid(
-            row=len(rows) + 1, column=0, columnspan=2, sticky="w"
-        )
+        review_tree.heading("#0", text="Arquivo")
+        review_tree.heading("size", text="Tamanho")
+        review_tree.heading("importance", text="Importância")
+        review_tree.heading("reason", text="Motivo")
+        review_tree.column("#0", width=360)
+        review_tree.column("size", width=100, anchor="e")
+        review_tree.column("importance", width=100, anchor="center")
+        review_tree.column("reason", width=360)
+        for review in reviews:
+            review_tree.insert(
+                "",
+                "end",
+                text=str(review.path),
+                values=(
+                    format_size(review.size),
+                    review.classification.importance.value,
+                    review.classification.reason,
+                ),
+            )
+        review_tree.pack(fill="both", expand=True, pady=12)
+        ttk.Label(
+            content,
+            text="A exclusão será permanente. Confirme somente se reconhece os arquivos.",
+            wraplength=700,
+        ).pack(anchor="w")
         buttons = ttk.Frame(content)
-        buttons.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="e", pady=(16, 0))
-        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Excluir permanentemente", command=lambda: self._confirm_delete(dialog, item, review.path)).pack(side="left")
+        buttons.pack(anchor="e", pady=(16, 0))
+        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(
+            side="left", padx=6
+        )
+        ttk.Button(
+            buttons,
+            text="Excluir permanentemente",
+            command=lambda: self._confirm_delete(dialog, items, reviews),
+        ).pack(side="left")
 
-    def _confirm_delete(self, dialog: tk.Toplevel, item: str, path: Path) -> None:
-        typed_name = simpledialog.askstring(
+    def _confirm_delete(
+        self, dialog: tk.Toplevel, items: list[str], reviews: list
+    ) -> None:
+        confirmed = messagebox.askyesno(
             "Confirmar exclusão permanente",
-            f"Esta ação não pode ser desfeita.\n\nDigite o nome exato para excluir:\n{path.name}",
+            f"Você tem certeza que deseja excluir permanentemente {len(reviews)} arquivo(s) selecionado(s)?\n\nEsta ação não pode ser desfeita.",
+            icon="warning",
             parent=dialog,
         )
-        if typed_name is None:
+        if not confirmed:
             return
-        if typed_name != path.name:
-            messagebox.showerror("Optimizer", "O nome digitado não corresponde ao arquivo.", parent=dialog)
-            return
-        try:
-            delete_file(path)
-        except OSError as error:
-            messagebox.showerror("Optimizer", str(error), parent=dialog)
-            return
-        self.paths.pop(item, None)
-        self.file_tree.delete(item)
+        deleted, failures = delete_files(review.path for review in reviews)
+        deleted_set = set(deleted)
+        for item in items:
+            path = self.paths.get(item)
+            if path and path.resolve() in deleted_set:
+                self.paths.pop(item, None)
+                self.file_tree.delete(item)
         dialog.destroy()
-        self.status.set(f"Excluído permanentemente: {path}")
-        messagebox.showinfo("Optimizer", "Arquivo excluído permanentemente.", parent=self)
+        self.status.set(
+            f"{len(deleted)} arquivo(s) excluído(s); {len(failures)} falha(s)."
+        )
+        if failures:
+            details = "\n".join(f"{path}: {error}" for path, error in failures[:5])
+            messagebox.showwarning(
+                "Optimizer",
+                f"Alguns arquivos não foram excluídos:\n\n{details}",
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Optimizer",
+                f"{len(deleted)} arquivo(s) excluído(s) permanentemente.",
+                parent=self,
+            )
+
+    def _load_drive_usage(self) -> None:
+        threading.Thread(target=self._read_drive_usage, daemon=True).start()
+
+    def _read_drive_usage(self) -> None:
+        drives = list_drive_usage()
+        self.after(0, self._show_drive_usage, drives)
+
+    def _show_drive_usage(self, drives: list) -> None:
+        self.drives_tree.delete(*self.drives_tree.get_children())
+        for drive in drives:
+            percent = (drive.used / drive.total * 100) if drive.total else 0
+            self.drives_tree.insert(
+                "",
+                "end",
+                text=str(drive.path),
+                values=(
+                    format_size(drive.total),
+                    format_size(drive.used),
+                    format_size(drive.free),
+                    f"{percent:.1f}%",
+                ),
+            )
+
+    def _open_storage_settings(self) -> None:
+        open_storage_settings()
+
+    def _open_startup_settings(self) -> None:
+        open_startup_settings()
+
+    def _open_task_manager(self) -> None:
+        open_task_manager()
+
+    def _open_optimize_drives(self) -> None:
+        open_optimize_drives()
 
     def _load_apps(self) -> None:
         self.status.set("Lendo aplicativos registrados...")
@@ -200,7 +365,12 @@ class OptimizerApp(tk.Tk):
     def _show_apps(self, apps: list) -> None:
         self.apps_tree.delete(*self.apps_tree.get_children())
         for app in apps:
-            self.apps_tree.insert("", "end", text=app.name, values=(app.publisher, app.version, app.location))
+            self.apps_tree.insert(
+                "",
+                "end",
+                text=app.name,
+                values=(app.publisher, app.version, app.location),
+            )
         self.status.set(f"{len(apps)} aplicativos encontrados.")
 
     def _open_apps_settings(self) -> None:
@@ -212,4 +382,3 @@ class OptimizerApp(tk.Tk):
 
 def run() -> None:
     OptimizerApp().mainloop()
-
