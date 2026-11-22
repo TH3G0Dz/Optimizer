@@ -1,17 +1,28 @@
 import threading
 import tkinter as tk
+from dataclasses import replace
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from .apps import list_installed_apps, open_windows_apps_settings
+from .apps import (
+    delete_leftover_folder,
+    list_desktop_apps,
+    list_installed_apps,
+    open_windows_apps_settings,
+    review_leftover_folder,
+    uninstall_app,
+)
 from .cleanup import delete_files, review_files
 from .importance import classify
+from .models import InstalledApp, SystemFeature
 from .scanner import format_size, list_children, list_drives
 from .system import (
     list_drive_usage,
+    list_system_features,
     open_optimize_drives,
     open_startup_settings,
     open_storage_settings,
+    open_system_feature,
     open_task_manager,
 )
 
@@ -24,6 +35,9 @@ class OptimizerApp(tk.Tk):
         self.minsize(850, 500)
         self.paths: dict[str, Path] = {}
         self.loaded: set[str] = set()
+        self.apps_by_item: dict[str, InstalledApp] = {}
+        self.pending_leftovers: dict[str, InstalledApp] = {}
+        self.features_by_item: dict[str, SystemFeature] = {}
         self.status = tk.StringVar(value="Selecione uma pasta para começar.")
         self._build_ui()
         self._load_drives()
@@ -43,12 +57,15 @@ class OptimizerApp(tk.Tk):
         files_tab = ttk.Frame(notebook)
         apps_tab = ttk.Frame(notebook)
         optimization_tab = ttk.Frame(notebook)
+        functions_tab = ttk.Frame(notebook)
         notebook.add(files_tab, text="Arquivos")
         notebook.add(apps_tab, text="Aplicativos")
         notebook.add(optimization_tab, text="Otimização")
+        notebook.add(functions_tab, text="Funções")
         self._build_files_tab(files_tab)
         self._build_apps_tab(apps_tab)
         self._build_optimization_tab(optimization_tab)
+        self._build_functions_tab(functions_tab)
         ttk.Label(self, textvariable=self.status, padding=(12, 4)).pack(fill="x")
 
     def _build_files_tab(self, parent: ttk.Frame) -> None:
@@ -91,28 +108,45 @@ class OptimizerApp(tk.Tk):
     def _build_apps_tab(self, parent: ttk.Frame) -> None:
         actions = ttk.Frame(parent, padding=8)
         actions.pack(fill="x")
-        ttk.Button(actions, text="Carregar aplicativos", command=self._load_apps).pack(
+        ttk.Button(actions, text="Atualizar aplicativos", command=self._load_apps).pack(
             side="left"
         )
+        self.uninstall_button = ttk.Button(
+            actions,
+            text="Desinstalar selecionado",
+            command=self._uninstall_selected,
+            state="disabled",
+        )
+        self.uninstall_button.pack(side="left", padx=4)
+        self.leftover_button = ttk.Button(
+            actions,
+            text="Revisar pasta residual",
+            command=self._delete_leftover_selected,
+            state="disabled",
+        )
+        self.leftover_button.pack(side="left", padx=4)
         ttk.Button(
             actions,
-            text="Abrir desinstalação do Windows",
+            text="Configurações do Windows",
             command=self._open_apps_settings,
-        ).pack(side="left", padx=8)
-        ttk.Label(actions, text="Resíduos serão analisados em uma versão futura.").pack(
-            side="right"
+        ).pack(side="left", padx=4)
+        columns = ("source", "publisher", "version", "status")
+        self.apps_tree = ttk.Treeview(
+            parent, columns=columns, show="tree headings", selectmode="browse"
         )
-        columns = ("publisher", "version", "location")
-        self.apps_tree = ttk.Treeview(parent, columns=columns, show="tree headings")
         self.apps_tree.heading("#0", text="Aplicativo")
+        self.apps_tree.heading("source", text="Tipo")
         self.apps_tree.heading("publisher", text="Publicador")
         self.apps_tree.heading("version", text="Versão")
-        self.apps_tree.heading("location", text="Local")
-        self.apps_tree.column("#0", width=300)
-        self.apps_tree.column("publisher", width=220)
-        self.apps_tree.column("version", width=120)
-        self.apps_tree.column("location", width=450)
+        self.apps_tree.heading("status", text="Pasta ou proteção")
+        self.apps_tree.column("#0", width=260)
+        self.apps_tree.column("source", width=90, anchor="center")
+        self.apps_tree.column("publisher", width=180)
+        self.apps_tree.column("version", width=100)
+        self.apps_tree.column("status", width=470)
         self.apps_tree.pack(fill="both", expand=True)
+        self.apps_tree.bind("<<TreeviewSelect>>", self._on_app_select)
+        self._load_apps()
 
     def _build_optimization_tab(self, parent: ttk.Frame) -> None:
         actions = ttk.Frame(parent, padding=8)
@@ -146,6 +180,38 @@ class OptimizerApp(tk.Tk):
             self.drives_tree.column(column, width=140, anchor="e")
         self.drives_tree.pack(fill="both", expand=True)
         self._load_drive_usage()
+
+    def _build_functions_tab(self, parent: ttk.Frame) -> None:
+        actions = ttk.Frame(parent, padding=8)
+        actions.pack(fill="x")
+        self.open_feature_button = ttk.Button(
+            actions,
+            text="Abrir configuração selecionada",
+            command=self._open_selected_feature,
+            state="disabled",
+        )
+        self.open_feature_button.pack(side="left")
+        ttk.Label(
+            actions,
+            text="Ajustes oficiais do Windows; serviços críticos não são alterados automaticamente.",
+        ).pack(side="right")
+        columns = ("effect", "risk")
+        self.functions_tree = ttk.Treeview(
+            parent, columns=columns, show="tree headings", selectmode="browse"
+        )
+        self.functions_tree.heading("#0", text="Função")
+        self.functions_tree.heading("effect", text="Possível benefício")
+        self.functions_tree.heading("risk", text="Risco")
+        self.functions_tree.column("#0", width=260)
+        self.functions_tree.column("effect", width=650)
+        self.functions_tree.column("risk", width=100, anchor="center")
+        self.functions_tree.pack(fill="both", expand=True)
+        self.functions_tree.bind("<<TreeviewSelect>>", self._on_feature_select)
+        for feature in list_system_features():
+            item = self.functions_tree.insert(
+                "", "end", text=feature.name, values=(feature.effect, feature.risk)
+            )
+            self.features_by_item[item] = feature
 
     def _load_drives(self) -> None:
         for drive in list_drives():
@@ -356,28 +422,185 @@ class OptimizerApp(tk.Tk):
 
     def _load_apps(self) -> None:
         self.status.set("Lendo aplicativos registrados...")
+        self.uninstall_button.configure(state="disabled")
+        self.leftover_button.configure(state="disabled")
         threading.Thread(target=self._read_apps, daemon=True).start()
 
     def _read_apps(self) -> None:
         apps = list_installed_apps()
         self.after(0, self._show_apps, apps)
 
-    def _show_apps(self, apps: list) -> None:
+    def _show_apps(self, apps: list[InstalledApp]) -> None:
         self.apps_tree.delete(*self.apps_tree.get_children())
-        for app in apps:
-            self.apps_tree.insert(
+        self.apps_by_item.clear()
+        display_apps = list(apps)
+        installed_ids = {app.identifier for app in apps}
+        for pending in self.pending_leftovers.values():
+            if pending.identifier not in installed_ids and pending.location:
+                display_apps.append(
+                    replace(
+                        pending,
+                        removable=False,
+                        protected_reason="Desinstalado; pasta residual disponível para revisão.",
+                    )
+                )
+        display_apps.sort(key=lambda app: (app.name.casefold(), app.source))
+        for app in display_apps:
+            status = app.protected_reason or app.location or "Pasta não informada"
+            item = self.apps_tree.insert(
                 "",
                 "end",
                 text=app.name,
-                values=(app.publisher, app.version, app.location),
+                values=(app.source, app.publisher, app.version, status),
             )
-        self.status.set(f"{len(apps)} aplicativos encontrados.")
+            self.apps_by_item[item] = app
+        self.status.set(f"{len(display_apps)} aplicativos encontrados.")
+
+    def _selected_app(self) -> InstalledApp | None:
+        selected = self.apps_tree.selection()
+        return self.apps_by_item.get(selected[0]) if selected else None
+
+    def _on_app_select(self, _event=None) -> None:
+        app = self._selected_app()
+        self.uninstall_button.configure(
+            state="normal" if app and app.removable else "disabled"
+        )
+        self.leftover_button.configure(
+            state=(
+                "normal"
+                if app and app.source == "Desktop" and app.location
+                else "disabled"
+            )
+        )
+        if app:
+            self.status.set(app.protected_reason or app.location or app.name)
+
+    def _uninstall_selected(self) -> None:
+        app = self._selected_app()
+        if not app or not app.removable:
+            return
+        if not messagebox.askyesno(
+            "Confirmar desinstalação",
+            f"Você tem certeza que deseja desinstalar {app.name}?\n\n"
+            "O desinstalador oficial será executado. Dados do aplicativo podem permanecer.",
+            icon="warning",
+            parent=self,
+        ):
+            return
+        self.uninstall_button.configure(state="disabled")
+        self.status.set(f"Iniciando desinstalação de {app.name}...")
+        threading.Thread(target=self._run_uninstall, args=(app,), daemon=True).start()
+
+    def _run_uninstall(self, app: InstalledApp) -> None:
+        error = None
+        try:
+            uninstall_app(app)
+        except (OSError, ValueError) as caught:
+            error = str(caught)
+        self.after(0, self._finish_uninstall, app, error)
+
+    def _finish_uninstall(self, app: InstalledApp, error: str | None) -> None:
+        if error:
+            messagebox.showerror("Optimizer", error, parent=self)
+            self._on_app_select()
+            return
+        if app.source == "Windows":
+            messagebox.showinfo(
+                "Optimizer",
+                f"{app.name} foi removido para o usuário atual.",
+                parent=self,
+            )
+            self._load_apps()
+            return
+        if app.location:
+            self.pending_leftovers[app.identifier] = app
+        self.status.set(
+            "Desinstalador aberto. Conclua-o e depois revise a pasta residual."
+        )
+        messagebox.showinfo(
+            "Optimizer",
+            "O desinstalador oficial foi aberto. Conclua o processo e depois use "
+            "Revisar pasta residual.",
+            parent=self,
+        )
+        self._on_app_select()
+
+    def _delete_leftover_selected(self) -> None:
+        app = self._selected_app()
+        if not app:
+            return
+        installed = list_desktop_apps()
+        try:
+            folder = review_leftover_folder(app, installed)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Optimizer", str(error), parent=self)
+            return
+        if not messagebox.askyesno(
+            "Confirmar exclusão permanente",
+            "Você tem certeza que deseja excluir permanentemente a pasta residual?\n\n"
+            f"{folder}\n\nEsta ação não pode ser desfeita.",
+            icon="warning",
+            parent=self,
+        ):
+            return
+        self.leftover_button.configure(state="disabled")
+        self.status.set(f"Excluindo pasta residual {folder}...")
+        threading.Thread(
+            target=self._run_leftover_delete,
+            args=(app, installed),
+            daemon=True,
+        ).start()
+
+    def _run_leftover_delete(
+        self, app: InstalledApp, installed: list[InstalledApp]
+    ) -> None:
+        deleted = None
+        error = None
+        try:
+            deleted = delete_leftover_folder(app, installed)
+        except (OSError, ValueError) as caught:
+            error = str(caught)
+        self.after(0, self._finish_leftover_delete, app, deleted, error)
+
+    def _finish_leftover_delete(
+        self, app: InstalledApp, deleted: Path | None, error: str | None
+    ) -> None:
+        if error:
+            messagebox.showerror("Optimizer", error, parent=self)
+            self._on_app_select()
+            return
+        self.pending_leftovers.pop(app.identifier, None)
+        self.status.set(f"Pasta residual excluída: {deleted}")
+        messagebox.showinfo(
+            "Optimizer", f"Pasta residual excluída:\n\n{deleted}", parent=self
+        )
+        self._load_apps()
 
     def _open_apps_settings(self) -> None:
         try:
             open_windows_apps_settings()
         except OSError as error:
             messagebox.showerror("Optimizer", str(error))
+
+    def _on_feature_select(self, _event=None) -> None:
+        selected = self.functions_tree.selection()
+        self.open_feature_button.configure(
+            state="normal"
+            if selected and selected[0] in self.features_by_item
+            else "disabled"
+        )
+
+    def _open_selected_feature(self) -> None:
+        selected = self.functions_tree.selection()
+        if not selected:
+            return
+        feature = self.features_by_item.get(selected[0])
+        if not feature:
+            return
+        try:
+            open_system_feature(feature)
+        except OSError as error:
+            messagebox.showerror("Optimizer", str(error), parent=self)
 
 
 def run() -> None:

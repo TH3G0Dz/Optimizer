@@ -10,11 +10,14 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Permite selecionar e revisar vários arquivos antes de qualquer ação.
 - Exclui o lote após uma única confirmação `Sim/Não`.
 - Bloqueia pastas, links e áreas críticas.
-- Lista aplicativos registrados no Windows.
-- Abre a tela oficial de desinstalação do Windows.
+- Lista aplicativos desktop e pacotes do Windows para o usuário atual.
+- Executa o desinstalador oficial dos aplicativos desktop após uma confirmação.
+- Remove pacotes Windows somente quando o sistema os marca como removíveis.
+- Exibe componentes protegidos, mas mantém a ação de remoção bloqueada.
+- Revisa e exclui a pasta residual de um app desktop somente depois que ele deixa de estar registrado.
 - Mostra espaço total, usado e livre por unidade.
 - Abre armazenamento, inicialização, Gerenciador de Tarefas e otimização de unidades do Windows.
-- Não remove pastas nem resíduos nesta versão.
+- Oferece uma aba de funções com ajustes oficiais de inicialização, jogos, efeitos visuais, diagnóstico, notificações e recursos opcionais.
 
 ## Classificação
 
@@ -53,14 +56,13 @@ O executável será criado em `dist\Optimizer.exe`.
 ## Próximas etapas
 
 1. Medir espaço recuperável sem excluir conteúdo.
-2. Relacionar resíduos ao aplicativo proprietário com níveis de confiança.
-3. Criar quarentena restaurável e diário de operações.
-4. Desinstalar pelo mecanismo oficial antes de oferecer resíduos.
-5. Adicionar assinatura de código e instalador do Windows.
+2. Relacionar resíduos fora da pasta de instalação ao aplicativo proprietário.
+3. Criar diário de operações e pontos de restauração quando suportados.
+4. Adicionar assinatura de código e instalador do Windows.
 
 Veja [ROADMAP.md](ROADMAP.md) para ideias de otimização priorizadas.
 
 ## Segurança e privacidade
 
-O processamento ocorre localmente. O projeto não envia nomes ou conteúdo de arquivos para serviços externos.
+O processamento ocorre localmente. O projeto não envia nomes ou conteúdo de arquivos para serviços externos. Pastas de pacotes em `WindowsApps` nunca são excluídas diretamente. O Optimizer não desativa serviços críticos, não limpa o Registro e não remove componentes protegidos.
 

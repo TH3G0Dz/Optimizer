@@ -1,10 +1,15 @@
 # Roadmap de otimização
 
-## Incluído na versão 0.3
+## Incluído na versão 0.4
 
 - Seleção múltipla, revisão em lote e uma confirmação de exclusão.
 - Resumo de espaço total, usado e livre por unidade.
 - Acesso às ferramentas oficiais de armazenamento, inicialização, processos e otimização de unidades do Windows.
+- Desinstalação pelo mecanismo oficial de aplicativos desktop.
+- Remoção de pacotes Windows removíveis para o usuário atual.
+- Proteção de pacotes de sistema, frameworks, recursos e Microsoft Store.
+- Revisão separada de pastas residuais, bloqueada enquanto o app ainda estiver registrado.
+- Aba de funções com atalhos oficiais e indicação de benefício e risco.
 
 ## Próxima versão
 
@@ -12,7 +17,7 @@
 2. Detectar duplicados por tamanho e hash, sem comparar conteúdo desnecessariamente.
 3. Medir o espaço recuperável antes de qualquer ação.
 4. Criar diário de operações para auditoria.
-5. Detectar resíduos somente após o desinstalador oficial terminar.
+5. Detectar resíduos adicionais fora da pasta oficial com confiança verificável.
 
 ## Armazenamento
 
@@ -44,5 +49,5 @@
 
 - **Necessário depois:** arquivos grandes, duplicados, espaço recuperável e resíduos de aplicativos.
 - **Útil depois:** crescimento de pastas, monitoramento persistente e histórico de operações.
-- **Adiado por risco:** exclusão de pastas, limpeza automática de Registro e desativação automática de serviços.
+- **Adiado por risco:** limpeza automática de Registro e desativação automática de serviços.
 - **Dispensável agora:** quarentena, porque mantém o espaço ocupado e conflita com a limpeza imediata.

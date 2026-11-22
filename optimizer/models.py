@@ -31,6 +31,11 @@ class InstalledApp:
     publisher: str
     version: str
     location: str
+    source: str = "Desktop"
+    identifier: str = ""
+    uninstall_command: str = ""
+    removable: bool = False
+    protected_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -46,3 +51,11 @@ class DriveUsage:
     total: int
     used: int
     free: int
+
+
+@dataclass(frozen=True)
+class SystemFeature:
+    name: str
+    effect: str
+    risk: str
+    settings_uri: str
