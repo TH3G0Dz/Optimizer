@@ -36,6 +36,13 @@ class InstalledApp:
     uninstall_command: str = ""
     removable: bool = False
     protected_reason: str = ""
+    pending_leftover: bool = False
+
+
+@dataclass(frozen=True)
+class AppInventory:
+    apps: tuple[InstalledApp, ...]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

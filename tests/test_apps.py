@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 from optimizer.apps import (
     delete_leftover_folder,
+    list_installed_apps,
     list_windows_apps,
+    prepare_installed_apps,
     review_leftover_folder,
     uninstall_app,
 )
@@ -99,6 +101,58 @@ class WindowsAppTests(unittest.TestCase):
         with patch("optimizer.apps.subprocess.Popen") as popen:
             uninstall_app(app)
         popen.assert_called_once_with(app.uninstall_command, shell=False)
+
+    def test_inventory_reports_partial_windows_failure(self) -> None:
+        desktop = InstalledApp("Editor", "Vendor", "1", r"C:\Apps\Editor")
+        with (
+            patch("optimizer.apps.list_desktop_apps", return_value=[desktop]),
+            patch(
+                "optimizer.apps.list_windows_apps",
+                side_effect=OSError("PowerShell bloqueado"),
+            ),
+        ):
+            inventory = list_installed_apps()
+        self.assertEqual((desktop,), inventory.apps)
+        self.assertIn("PowerShell bloqueado", inventory.warnings[0])
+
+    def test_filters_apps_and_marks_pending_leftover(self) -> None:
+        desktop = InstalledApp(
+            "Editor",
+            "Vendor",
+            "1",
+            r"C:\Apps\Editor",
+            identifier="desktop:editor",
+            removable=True,
+        )
+        protected = InstalledApp(
+            "System Host",
+            "Microsoft",
+            "",
+            "",
+            source="Windows",
+            identifier="windows:host",
+            protected_reason="Protegido",
+        )
+        pending = InstalledApp(
+            "Old Tool",
+            "Vendor",
+            "1",
+            r"C:\Apps\OldTool",
+            identifier="desktop:old",
+        )
+        removable = prepare_installed_apps(
+            [desktop, protected], [pending], category="Removíveis"
+        )
+        residual = prepare_installed_apps(
+            [desktop, protected], [pending], category="Resíduos"
+        )
+        searched = prepare_installed_apps(
+            [desktop, protected], [pending], query="microsoft"
+        )
+        self.assertEqual([desktop], removable)
+        self.assertEqual("Old Tool", residual[0].name)
+        self.assertTrue(residual[0].pending_leftover)
+        self.assertEqual([protected], searched)
 
 
 class LeftoverTests(unittest.TestCase):

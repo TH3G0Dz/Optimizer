@@ -1,20 +1,22 @@
 import threading
 import tkinter as tk
-from dataclasses import replace
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from . import __version__
 from .apps import (
+    APP_FILTERS,
     delete_leftover_folder,
     list_desktop_apps,
     list_installed_apps,
     open_windows_apps_settings,
+    prepare_installed_apps,
     review_leftover_folder,
     uninstall_app,
 )
 from .cleanup import delete_files, review_files
 from .importance import classify
-from .models import InstalledApp, SystemFeature
+from .models import AppInventory, InstalledApp, SystemFeature
 from .scanner import format_size, list_children, list_drives
 from .system import (
     list_drive_usage,
@@ -25,61 +27,128 @@ from .system import (
     open_system_feature,
     open_task_manager,
 )
+from .theme import apply_theme
 
 
 class OptimizerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        apply_theme(self)
         self.title("Optimizer")
-        self.geometry("1180x700")
-        self.minsize(850, 500)
+        self.geometry("1280x760")
+        self.minsize(960, 620)
         self.paths: dict[str, Path] = {}
         self.loaded: set[str] = set()
         self.apps_by_item: dict[str, InstalledApp] = {}
         self.pending_leftovers: dict[str, InstalledApp] = {}
         self.features_by_item: dict[str, SystemFeature] = {}
+        self.app_inventory = AppInventory(())
+        self.app_query = tk.StringVar()
+        self.app_category = tk.StringVar(value=APP_FILTERS[0])
+        self.apps_count = tk.StringVar(value="Carregando inventário...")
+        self.total_capacity = tk.StringVar(value="—")
+        self.total_used = tk.StringVar(value="—")
+        self.total_free = tk.StringVar(value="—")
         self.status = tk.StringVar(value="Selecione uma pasta para começar.")
         self._build_ui()
         self._load_drives()
 
     def _build_ui(self) -> None:
-        header = ttk.Frame(self, padding=12)
+        header = ttk.Frame(self, style="Surface.TFrame", padding=(22, 17))
         header.pack(fill="x")
-        ttk.Label(header, text="Optimizer", font=("Segoe UI", 20, "bold")).pack(
-            side="left"
+        identity = ttk.Frame(header, style="Surface.TFrame")
+        identity.pack(side="left")
+        ttk.Label(identity, text="OPTIMIZER / SISTEMA", style="Brand.TLabel").pack(
+            anchor="w"
+        )
+        ttk.Label(identity, text="Espaço sob controle.", style="Title.TLabel").pack(
+            anchor="w", pady=(1, 1)
         )
         ttk.Label(
-            header, text="Exclusão permanente somente após revisão e confirmação."
-        ).pack(side="right")
+            identity,
+            text="Revise, entenda e libere armazenamento sem apagar às cegas.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w")
+        trust = ttk.Frame(header, style="Surface.TFrame")
+        trust.pack(side="right")
+        ttk.Label(trust, text="●  PROCESSAMENTO LOCAL", style="Safe.TLabel").pack(
+            anchor="e"
+        )
+        ttk.Label(trust, text=f"Versão {__version__}", style="Subtitle.TLabel").pack(
+            anchor="e", pady=(5, 0)
+        )
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=12, pady=(0, 8))
-        files_tab = ttk.Frame(notebook)
-        apps_tab = ttk.Frame(notebook)
-        optimization_tab = ttk.Frame(notebook)
-        functions_tab = ttk.Frame(notebook)
-        notebook.add(files_tab, text="Arquivos")
-        notebook.add(apps_tab, text="Aplicativos")
-        notebook.add(optimization_tab, text="Otimização")
-        notebook.add(functions_tab, text="Funções")
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill="both", expand=True, padx=18, pady=(14, 12))
+        files_tab = ttk.Frame(self.notebook)
+        apps_tab = ttk.Frame(self.notebook)
+        optimization_tab = ttk.Frame(self.notebook)
+        functions_tab = ttk.Frame(self.notebook)
+        self.notebook.add(files_tab, text="Arquivos")
+        self.notebook.add(apps_tab, text="Aplicativos")
+        self.notebook.add(optimization_tab, text="Otimização")
+        self.notebook.add(functions_tab, text="Funções")
         self._build_files_tab(files_tab)
         self._build_apps_tab(apps_tab)
         self._build_optimization_tab(optimization_tab)
         self._build_functions_tab(functions_tab)
-        ttk.Label(self, textvariable=self.status, padding=(12, 4)).pack(fill="x")
+        status_bar = ttk.Frame(self, style="Surface.TFrame", padding=(18, 8))
+        status_bar.pack(fill="x", side="bottom")
+        ttk.Label(status_bar, text="●", style="Safe.TLabel", width=2, anchor="w").pack(
+            side="left"
+        )
+        ttk.Label(status_bar, textvariable=self.status, style="Status.TLabel").pack(
+            side="left", fill="x", expand=True
+        )
+        ttk.Label(
+            status_bar,
+            text="Ctrl+F buscar  •  F5 atualizar",
+            style="Status.TLabel",
+        ).pack(side="right")
+        self.bind_all("<Control-f>", self._focus_app_search)
+        self.bind_all("<F5>", self._refresh_active_view)
+
+    def _section_header(self, parent: ttk.Frame, title: str, subtitle: str) -> None:
+        header = ttk.Frame(parent, padding=(6, 13, 6, 9))
+        header.pack(fill="x")
+        ttk.Label(header, text=title, style="Section.TLabel").pack(anchor="w")
+        ttk.Label(header, text=subtitle, style="Muted.TLabel").pack(
+            anchor="w", pady=(3, 0)
+        )
+
+    def _place_tree(self, parent: ttk.Frame, tree: ttk.Treeview) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        vertical = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        horizontal = ttk.Scrollbar(parent, orient="horizontal", command=tree.xview)
+        tree.configure(
+            yscrollcommand=vertical.set,
+            xscrollcommand=horizontal.set,
+        )
+        tree.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
 
     def _build_files_tab(self, parent: ttk.Frame) -> None:
-        actions = ttk.Frame(parent, padding=8)
-        actions.pack(fill="x")
+        self._section_header(
+            parent,
+            "Explorador seguro",
+            "Abra pastas sob demanda. A importância explica o risco antes da ação.",
+        )
+        actions = ttk.Frame(parent, style="Surface.TFrame", padding=10)
+        actions.pack(fill="x", pady=(0, 10))
         self.review_button = ttk.Button(
             actions,
             text="Revisar arquivos selecionados",
             command=self._review_selected,
             state="disabled",
+            style="Primary.TButton",
         )
         self.review_button.pack(side="left")
         ttk.Label(
-            actions, text="Pastas e arquivos críticos permanecem protegidos."
+            actions,
+            text="Pastas, atalhos e áreas críticas permanecem protegidos.",
+            style="SurfaceMuted.TLabel",
         ).pack(side="right")
 
         tree_frame = ttk.Frame(parent)
@@ -96,26 +165,55 @@ class OptimizerApp(tk.Tk):
         self.file_tree.column("size", width=100, anchor="e")
         self.file_tree.column("importance", width=100, anchor="center")
         self.file_tree.column("reason", width=450)
-        scrollbar = ttk.Scrollbar(
-            tree_frame, orient="vertical", command=self.file_tree.yview
-        )
-        self.file_tree.configure(yscrollcommand=scrollbar.set)
-        self.file_tree.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.file_tree.tag_configure("Crítico", foreground="#FF8A8A")
+        self.file_tree.tag_configure("Alto", foreground="#F5C56B")
+        self.file_tree.tag_configure("Baixo", foreground="#6FE0AB")
+        self._place_tree(tree_frame, self.file_tree)
         self.file_tree.bind("<<TreeviewOpen>>", self._on_open)
         self.file_tree.bind("<<TreeviewSelect>>", self._on_select)
 
     def _build_apps_tab(self, parent: ttk.Frame) -> None:
-        actions = ttk.Frame(parent, padding=8)
-        actions.pack(fill="x")
-        ttk.Button(actions, text="Atualizar aplicativos", command=self._load_apps).pack(
-            side="left"
+        self._section_header(
+            parent,
+            "Aplicativos instalados",
+            "Desinstale pelo mecanismo oficial. Resíduos só aparecem após o app sair do Registro.",
         )
+        filters = ttk.Frame(parent, style="Surface.TFrame", padding=10)
+        filters.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters, text="Buscar", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        self.app_search = ttk.Entry(filters, textvariable=self.app_query, width=31)
+        self.app_search.pack(side="left", padx=(0, 10))
+        ttk.Label(filters, text="Mostrar", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        category = ttk.Combobox(
+            filters,
+            textvariable=self.app_category,
+            values=APP_FILTERS,
+            state="readonly",
+            width=14,
+        )
+        category.pack(side="left")
+        ttk.Label(
+            filters, textvariable=self.apps_count, style="SurfaceMuted.TLabel"
+        ).pack(side="right")
+
+        actions = ttk.Frame(parent, padding=(0, 0, 0, 9))
+        actions.pack(fill="x")
+        ttk.Button(
+            actions,
+            text="Atualizar inventário",
+            command=self._load_apps,
+            style="Primary.TButton",
+        ).pack(side="left")
         self.uninstall_button = ttk.Button(
             actions,
             text="Desinstalar selecionado",
             command=self._uninstall_selected,
             state="disabled",
+            style="Danger.TButton",
         )
         self.uninstall_button.pack(side="left", padx=4)
         self.leftover_button = ttk.Button(
@@ -130,9 +228,11 @@ class OptimizerApp(tk.Tk):
             text="Configurações do Windows",
             command=self._open_apps_settings,
         ).pack(side="left", padx=4)
+        tree_frame = ttk.Frame(parent)
+        tree_frame.pack(fill="both", expand=True)
         columns = ("source", "publisher", "version", "status")
         self.apps_tree = ttk.Treeview(
-            parent, columns=columns, show="tree headings", selectmode="browse"
+            tree_frame, columns=columns, show="tree headings", selectmode="browse"
         )
         self.apps_tree.heading("#0", text="Aplicativo")
         self.apps_tree.heading("source", text="Tipo")
@@ -144,15 +244,47 @@ class OptimizerApp(tk.Tk):
         self.apps_tree.column("publisher", width=180)
         self.apps_tree.column("version", width=100)
         self.apps_tree.column("status", width=470)
-        self.apps_tree.pack(fill="both", expand=True)
+        self.apps_tree.tag_configure("protected", foreground="#F5C56B")
+        self.apps_tree.tag_configure("removable", foreground="#DDE8FA")
+        self.apps_tree.tag_configure("leftover", foreground="#6FE0AB")
+        self._place_tree(tree_frame, self.apps_tree)
         self.apps_tree.bind("<<TreeviewSelect>>", self._on_app_select)
+        self.app_query.trace_add("write", self._on_app_filter)
+        category.bind("<<ComboboxSelected>>", self._on_app_filter)
         self._load_apps()
 
     def _build_optimization_tab(self, parent: ttk.Frame) -> None:
-        actions = ttk.Frame(parent, padding=8)
-        actions.pack(fill="x")
+        self._section_header(
+            parent,
+            "Visão do armazenamento",
+            "Compare capacidade, uso e espaço livre antes de abrir ferramentas do Windows.",
+        )
+        cards = ttk.Frame(parent)
+        cards.pack(fill="x", pady=(0, 10))
+        for index, (title, value) in enumerate(
+            (
+                ("CAPACIDADE TOTAL", self.total_capacity),
+                ("ESPAÇO USADO", self.total_used),
+                ("ESPAÇO LIVRE", self.total_free),
+            )
+        ):
+            card = ttk.Frame(cards, style="Card.TFrame", padding=(16, 13))
+            card.grid(
+                row=0, column=index, sticky="ew", padx=(0 if index == 0 else 6, 0)
+            )
+            cards.columnconfigure(index, weight=1)
+            ttk.Label(card, text=title, style="CardTitle.TLabel").pack(anchor="w")
+            ttk.Label(card, textvariable=value, style="CardValue.TLabel").pack(
+                anchor="w", pady=(4, 0)
+            )
+
+        actions = ttk.Frame(parent, style="Surface.TFrame", padding=10)
+        actions.pack(fill="x", pady=(0, 10))
         ttk.Button(
-            actions, text="Atualizar discos", command=self._load_drive_usage
+            actions,
+            text="Atualizar discos",
+            command=self._load_drive_usage,
+            style="Primary.TButton",
         ).pack(side="left")
         ttk.Button(
             actions,
@@ -168,8 +300,12 @@ class OptimizerApp(tk.Tk):
         ttk.Button(
             actions, text="Otimizar unidades", command=self._open_optimize_drives
         ).pack(side="left", padx=4)
+        tree_frame = ttk.Frame(parent)
+        tree_frame.pack(fill="both", expand=True)
         columns = ("total", "used", "free", "percent")
-        self.drives_tree = ttk.Treeview(parent, columns=columns, show="tree headings")
+        self.drives_tree = ttk.Treeview(
+            tree_frame, columns=columns, show="tree headings"
+        )
         self.drives_tree.heading("#0", text="Unidade")
         self.drives_tree.heading("total", text="Total")
         self.drives_tree.heading("used", text="Usado")
@@ -178,26 +314,35 @@ class OptimizerApp(tk.Tk):
         self.drives_tree.column("#0", width=240)
         for column in columns:
             self.drives_tree.column(column, width=140, anchor="e")
-        self.drives_tree.pack(fill="both", expand=True)
+        self._place_tree(tree_frame, self.drives_tree)
         self._load_drive_usage()
 
     def _build_functions_tab(self, parent: ttk.Frame) -> None:
-        actions = ttk.Frame(parent, padding=8)
-        actions.pack(fill="x")
+        self._section_header(
+            parent,
+            "Ajustes recomendados",
+            "Cada item abre a página oficial do Windows. O Optimizer não altera serviços críticos.",
+        )
+        actions = ttk.Frame(parent, style="Surface.TFrame", padding=10)
+        actions.pack(fill="x", pady=(0, 10))
         self.open_feature_button = ttk.Button(
             actions,
             text="Abrir configuração selecionada",
             command=self._open_selected_feature,
             state="disabled",
+            style="Primary.TButton",
         )
         self.open_feature_button.pack(side="left")
         ttk.Label(
             actions,
-            text="Ajustes oficiais do Windows; serviços críticos não são alterados automaticamente.",
+            text="Revise o impacto antes de desativar qualquer função.",
+            style="SurfaceMuted.TLabel",
         ).pack(side="right")
+        tree_frame = ttk.Frame(parent)
+        tree_frame.pack(fill="both", expand=True)
         columns = ("effect", "risk")
         self.functions_tree = ttk.Treeview(
-            parent, columns=columns, show="tree headings", selectmode="browse"
+            tree_frame, columns=columns, show="tree headings", selectmode="browse"
         )
         self.functions_tree.heading("#0", text="Função")
         self.functions_tree.heading("effect", text="Possível benefício")
@@ -205,11 +350,18 @@ class OptimizerApp(tk.Tk):
         self.functions_tree.column("#0", width=260)
         self.functions_tree.column("effect", width=650)
         self.functions_tree.column("risk", width=100, anchor="center")
-        self.functions_tree.pack(fill="both", expand=True)
+        self.functions_tree.tag_configure("Baixo", foreground="#6FE0AB")
+        self.functions_tree.tag_configure("Médio", foreground="#F5C56B")
+        self.functions_tree.tag_configure("Alto", foreground="#FF8A8A")
+        self._place_tree(tree_frame, self.functions_tree)
         self.functions_tree.bind("<<TreeviewSelect>>", self._on_feature_select)
         for feature in list_system_features():
             item = self.functions_tree.insert(
-                "", "end", text=feature.name, values=(feature.effect, feature.risk)
+                "",
+                "end",
+                text=feature.name,
+                values=(feature.effect, feature.risk),
+                tags=(feature.risk,),
             )
             self.features_by_item[item] = feature
 
@@ -221,6 +373,7 @@ class OptimizerApp(tk.Tk):
                 "end",
                 text=str(drive),
                 values=("", result.importance.value, result.reason),
+                tags=(result.importance.value,),
             )
             self.paths[item] = drive
             self.file_tree.insert(item, "end", text="Carregando...")
@@ -246,6 +399,7 @@ class OptimizerApp(tk.Tk):
         for child in self.file_tree.get_children(parent):
             self.file_tree.delete(child)
         if error:
+            self.loaded.discard(parent)
             self.file_tree.insert(
                 parent, "end", text="Acesso indisponível", values=("", "Revisar", error)
             )
@@ -261,6 +415,7 @@ class OptimizerApp(tk.Tk):
                     entry.classification.importance.value,
                     entry.classification.reason,
                 ),
+                tags=(entry.classification.importance.value,),
             )
             self.paths[item] = entry.path
             if entry.is_dir:
@@ -295,7 +450,7 @@ class OptimizerApp(tk.Tk):
             return
 
         dialog = tk.Toplevel(self)
-        dialog.title("Revisar arquivo")
+        dialog.title("Revisar exclusão")
         dialog.resizable(False, False)
         dialog.transient(self)
         dialog.grab_set()
@@ -321,6 +476,9 @@ class OptimizerApp(tk.Tk):
         review_tree.column("size", width=100, anchor="e")
         review_tree.column("importance", width=100, anchor="center")
         review_tree.column("reason", width=360)
+        review_tree.tag_configure("Crítico", foreground="#FF8A8A")
+        review_tree.tag_configure("Alto", foreground="#F5C56B")
+        review_tree.tag_configure("Baixo", foreground="#6FE0AB")
         for review in reviews:
             review_tree.insert(
                 "",
@@ -331,6 +489,7 @@ class OptimizerApp(tk.Tk):
                     review.classification.importance.value,
                     review.classification.reason,
                 ),
+                tags=(review.classification.importance.value,),
             )
         review_tree.pack(fill="both", expand=True, pady=12)
         ttk.Label(
@@ -347,6 +506,7 @@ class OptimizerApp(tk.Tk):
             buttons,
             text="Excluir permanentemente",
             command=lambda: self._confirm_delete(dialog, items, reviews),
+            style="Danger.TButton",
         ).pack(side="left")
 
     def _confirm_delete(
@@ -360,17 +520,35 @@ class OptimizerApp(tk.Tk):
         )
         if not confirmed:
             return
+        dialog.destroy()
+        self.review_button.configure(state="disabled")
+        self.status.set(f"Excluindo {len(reviews)} arquivo(s)...")
+        threading.Thread(
+            target=self._delete_reviewed_files,
+            args=(items, reviews),
+            daemon=True,
+        ).start()
+
+    def _delete_reviewed_files(self, items: list[str], reviews: list) -> None:
         deleted, failures = delete_files(review.path for review in reviews)
+        self.after(0, self._finish_file_delete, items, deleted, failures)
+
+    def _finish_file_delete(
+        self,
+        items: list[str],
+        deleted: list[Path],
+        failures: list[tuple[Path, str]],
+    ) -> None:
         deleted_set = set(deleted)
         for item in items:
             path = self.paths.get(item)
             if path and path.resolve() in deleted_set:
                 self.paths.pop(item, None)
                 self.file_tree.delete(item)
-        dialog.destroy()
         self.status.set(
             f"{len(deleted)} arquivo(s) excluído(s); {len(failures)} falha(s)."
         )
+        self._on_select()
         if failures:
             details = "\n".join(f"{path}: {error}" for path, error in failures[:5])
             messagebox.showwarning(
@@ -394,6 +572,12 @@ class OptimizerApp(tk.Tk):
 
     def _show_drive_usage(self, drives: list) -> None:
         self.drives_tree.delete(*self.drives_tree.get_children())
+        total_capacity = sum(drive.total for drive in drives)
+        total_used = sum(drive.used for drive in drives)
+        total_free = sum(drive.free for drive in drives)
+        self.total_capacity.set(format_size(total_capacity))
+        self.total_used.set(format_size(total_used))
+        self.total_free.set(format_size(total_free))
         for drive in drives:
             percent = (drive.used / drive.total * 100) if drive.total else 0
             self.drives_tree.insert(
@@ -422,39 +606,70 @@ class OptimizerApp(tk.Tk):
 
     def _load_apps(self) -> None:
         self.status.set("Lendo aplicativos registrados...")
+        self.apps_count.set("Carregando inventário...")
         self.uninstall_button.configure(state="disabled")
         self.leftover_button.configure(state="disabled")
         threading.Thread(target=self._read_apps, daemon=True).start()
 
     def _read_apps(self) -> None:
-        apps = list_installed_apps()
-        self.after(0, self._show_apps, apps)
+        try:
+            inventory = list_installed_apps()
+        except (OSError, ValueError, RuntimeError) as error:
+            self.after(0, self._show_apps_error, str(error))
+            return
+        self.after(0, self._show_apps, inventory)
 
-    def _show_apps(self, apps: list[InstalledApp]) -> None:
+    def _show_apps(self, inventory: AppInventory) -> None:
+        self.app_inventory = inventory
+        self._render_apps()
+        if inventory.warnings:
+            self.status.set("; ".join(inventory.warnings))
+        else:
+            self.status.set(f"{len(inventory.apps)} aplicativos encontrados.")
+
+    def _show_apps_error(self, error: str) -> None:
+        self.apps_count.set("Inventário indisponível")
+        self.status.set(f"Falha ao carregar aplicativos: {error}")
+        messagebox.showerror(
+            "Falha no inventário",
+            f"Não foi possível carregar os aplicativos.\n\n{error}",
+            parent=self,
+        )
+
+    def _on_app_filter(self, *_args) -> None:
+        self._render_apps()
+
+    def _render_apps(self) -> None:
         self.apps_tree.delete(*self.apps_tree.get_children())
         self.apps_by_item.clear()
-        display_apps = list(apps)
-        installed_ids = {app.identifier for app in apps}
-        for pending in self.pending_leftovers.values():
-            if pending.identifier not in installed_ids and pending.location:
-                display_apps.append(
-                    replace(
-                        pending,
-                        removable=False,
-                        protected_reason="Desinstalado; pasta residual disponível para revisão.",
-                    )
-                )
-        display_apps.sort(key=lambda app: (app.name.casefold(), app.source))
+        display_apps = prepare_installed_apps(
+            self.app_inventory.apps,
+            self.pending_leftovers.values(),
+            query=self.app_query.get(),
+            category=self.app_category.get(),
+        )
+        all_apps = prepare_installed_apps(
+            self.app_inventory.apps, self.pending_leftovers.values()
+        )
         for app in display_apps:
             status = app.protected_reason or app.location or "Pasta não informada"
+            source = "Resíduo" if app.pending_leftover else app.source
+            tag = (
+                "leftover"
+                if app.pending_leftover
+                else "removable"
+                if app.removable
+                else "protected"
+            )
             item = self.apps_tree.insert(
                 "",
                 "end",
                 text=app.name,
-                values=(app.source, app.publisher, app.version, status),
+                values=(source, app.publisher, app.version, status),
+                tags=(tag,),
             )
             self.apps_by_item[item] = app
-        self.status.set(f"{len(display_apps)} aplicativos encontrados.")
+        self.apps_count.set(f"{len(display_apps)} de {len(all_apps)} itens")
 
     def _selected_app(self) -> InstalledApp | None:
         selected = self.apps_tree.selection()
@@ -601,6 +816,27 @@ class OptimizerApp(tk.Tk):
             open_system_feature(feature)
         except OSError as error:
             messagebox.showerror("Optimizer", str(error), parent=self)
+
+    def _focus_app_search(self, _event=None) -> str:
+        self.notebook.select(1)
+        self.app_search.focus_set()
+        self.app_search.selection_range(0, "end")
+        return "break"
+
+    def _refresh_active_view(self, _event=None) -> str:
+        current = self.notebook.index("current")
+        if current == 0:
+            self.file_tree.delete(*self.file_tree.get_children())
+            self.paths.clear()
+            self.loaded.clear()
+            self._load_drives()
+            self.status.set("Unidades atualizadas.")
+        elif current == 1:
+            self._load_apps()
+        elif current == 2:
+            self._load_drive_usage()
+            self.status.set("Atualizando uso dos discos...")
+        return "break"
 
 
 def run() -> None:

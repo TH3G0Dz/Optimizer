@@ -1,6 +1,6 @@
 # Roadmap de otimização
 
-## Incluído na versão 0.4
+## Incluído na versão 0.5
 
 - Seleção múltipla, revisão em lote e uma confirmação de exclusão.
 - Resumo de espaço total, usado e livre por unidade.
@@ -10,14 +10,34 @@
 - Proteção de pacotes de sistema, frameworks, recursos e Microsoft Store.
 - Revisão separada de pastas residuais, bloqueada enquanto o app ainda estiver registrado.
 - Aba de funções com atalhos oficiais e indicação de benefício e risco.
+- Interface escura nativa com métricas, estados visuais e rolagem completa.
+- Busca e filtros no inventário de aplicativos.
+- Aviso explícito quando a lista de apps Windows fica parcial.
+- Proteção contra caminhos que chegam a áreas críticas por junções.
+- Exclusão de arquivos em segundo plano para manter a janela responsiva.
+- Atalhos `Ctrl+F` e `F5`.
 
 ## Próxima versão
 
 1. Localizar arquivos grandes e antigos com filtros claros.
-2. Detectar duplicados por tamanho e hash, sem comparar conteúdo desnecessariamente.
-3. Medir o espaço recuperável antes de qualquer ação.
-4. Criar diário de operações para auditoria.
+2. Detectar duplicados primeiro por tamanho e depois por hash.
+3. Medir espaço recuperável por categoria antes de qualquer ação.
+4. Criar diário de operações para auditoria e desfazer ações compatíveis.
 5. Detectar resíduos adicionais fora da pasta oficial com confiança verificável.
+6. Paginar pastas com centenas de milhares de entradas.
+
+## Novas ideias priorizadas
+
+- **Mapa de espaço:** treemap local para localizar áreas grandes sem abrir pasta por pasta.
+- **Receitas seguras:** caches conhecidos, miniaturas, relatórios de falha e instaladores antigos.
+- **Duplicados em duas etapas:** tamanho primeiro; hash somente nos candidatos.
+- **Impacto de inicialização:** combinar estado, publicador e impacto medido pelo Windows.
+- **Histórico de limpeza:** data, caminho, tamanho, resultado e motivo da classificação.
+- **Ponto de restauração:** oferecer antes de mudanças de alto impacto suportadas pelo Windows.
+- **Saúde de discos:** SMART, TRIM, temperatura e alerta de pouco espaço.
+- **Modo jogo ou trabalho:** apenas recomendações reversíveis de energia, captura e inicialização.
+- **Comparação temporal:** mostrar quais pastas cresceram desde a última análise.
+- **Exportar relatório:** resumo local em JSON ou CSV, sem enviar nomes para serviços externos.
 
 ## Armazenamento
 

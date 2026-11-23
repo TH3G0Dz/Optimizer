@@ -3,9 +3,11 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
-from .models import InstalledApp
+from .models import AppInventory, InstalledApp
 
 PROTECTED_APPX_NAMES = {
     "aimgr",
@@ -45,13 +47,57 @@ PROTECTED_APPX_PREFIXES = (
 )
 
 
-def list_installed_apps() -> list[InstalledApp]:
+APP_FILTERS = (
+    "Todos",
+    "Removíveis",
+    "Protegidos",
+    "Desktop",
+    "Windows",
+    "Resíduos",
+)
+
+
+def list_installed_apps() -> AppInventory:
     apps = list_desktop_apps()
+    warnings: list[str] = []
     try:
         apps.extend(list_windows_apps())
-    except OSError:
-        pass
-    return sorted(apps, key=lambda app: (app.name.casefold(), app.source))
+    except OSError as error:
+        detail = str(error).splitlines()[0]
+        warnings.append(f"Pacotes do Windows não foram carregados: {detail}")
+    ordered = sorted(apps, key=lambda app: (app.name.casefold(), app.source))
+    return AppInventory(tuple(ordered), tuple(warnings))
+
+
+def prepare_installed_apps(
+    apps: Iterable[InstalledApp],
+    pending_leftovers: Iterable[InstalledApp] = (),
+    *,
+    query: str = "",
+    category: str = "Todos",
+) -> list[InstalledApp]:
+    display_apps = list(apps)
+    installed_ids = {app.identifier for app in display_apps}
+    for pending in pending_leftovers:
+        if pending.identifier not in installed_ids and pending.location:
+            display_apps.append(
+                replace(
+                    pending,
+                    removable=False,
+                    protected_reason=(
+                        "Desinstalado; pasta residual disponível para revisão."
+                    ),
+                    pending_leftover=True,
+                )
+            )
+
+    needle = query.strip().casefold()
+    filtered = [
+        app
+        for app in display_apps
+        if _matches_app(app, needle) and _matches_category(app, category)
+    ]
+    return sorted(filtered, key=lambda app: (app.name.casefold(), app.source))
 
 
 def list_desktop_apps() -> list[InstalledApp]:
@@ -77,7 +123,7 @@ def list_desktop_apps() -> list[InstalledApp]:
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         ),
     )
-    apps: dict[tuple[str, str], InstalledApp] = {}
+    apps: dict[str, InstalledApp] = {}
     for scope, hive, location in locations:
         try:
             with winreg.OpenKey(hive, location) as root:
@@ -108,7 +154,7 @@ def list_desktop_apps() -> list[InstalledApp]:
                                     else "O aplicativo não registrou um desinstalador oficial."
                                 ),
                             )
-                            apps[(app.name.casefold(), app.version.casefold())] = app
+                            apps[app.identifier] = app
                     except OSError:
                         continue
         except OSError:
@@ -257,6 +303,27 @@ def _protected_appx_reason(
     if name in PROTECTED_APPX_NAMES or name.startswith(PROTECTED_APPX_PREFIXES):
         return "Componente protegido para evitar falhas no Windows ou em outros apps."
     return ""
+
+
+def _matches_app(app: InstalledApp, needle: str) -> bool:
+    if not needle:
+        return True
+    searchable = f"{app.name} {app.publisher} {app.version} {app.location}"
+    return needle in searchable.casefold()
+
+
+def _matches_category(app: InstalledApp, category: str) -> bool:
+    if category == "Removíveis":
+        return app.removable
+    if category == "Protegidos":
+        return not app.removable and not app.pending_leftover
+    if category == "Desktop":
+        return app.source == "Desktop" and not app.pending_leftover
+    if category == "Windows":
+        return app.source == "Windows"
+    if category == "Resíduos":
+        return app.pending_leftover
+    return True
 
 
 def _friendly_appx_name(name: str) -> str:

@@ -7,17 +7,19 @@ from .models import FileReview, Importance
 
 def review_file(path: Path) -> FileReview:
     path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {path}")
     if path.is_symlink():
         raise ValueError("Links não podem ser excluídos nesta versão.")
-    if not path.is_file():
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise FileNotFoundError(f"Arquivo não encontrado: {path}") from error
+    if not resolved.is_file():
         raise IsADirectoryError("Somente arquivos podem ser excluídos nesta versão.")
 
-    result = classify(path)
+    result = classify(resolved)
     if result.importance is Importance.CRITICAL:
         raise PermissionError("Arquivos críticos são protegidos pelo Optimizer.")
-    return FileReview(path.resolve(), path.stat().st_size, result)
+    return FileReview(resolved, resolved.stat().st_size, result)
 
 
 def delete_file(path: Path) -> FileReview:

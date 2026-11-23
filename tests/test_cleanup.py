@@ -16,8 +16,22 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(4, review.size)
             self.assertEqual(path.resolve(), review.path)
 
+    def test_classifies_resolved_destination(self) -> None:
+        with tempfile.TemporaryDirectory(dir="D:\\Optimizer") as folder:
+            path = Path(folder, "candidate.bin")
+            path.write_bytes(b"1234")
+            classification = Classification(Importance.REVIEW, "Revisar")
+            with patch(
+                "optimizer.cleanup.classify", return_value=classification
+            ) as classify:
+                review_file(path)
+            classify.assert_called_once_with(path.resolve())
+
     def test_rejects_directory(self) -> None:
-        with tempfile.TemporaryDirectory(dir="D:\\Optimizer") as folder, self.assertRaises(IsADirectoryError):
+        with (
+            tempfile.TemporaryDirectory(dir="D:\\Optimizer") as folder,
+            self.assertRaises(IsADirectoryError),
+        ):
             review_file(Path(folder))
 
     def test_rejects_critical_file(self) -> None:
