@@ -7,6 +7,9 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Interface nativa redesenhada, com tema escuro, hierarquia clara e tabelas responsivas.
 - Exibe discos, pastas e arquivos em uma árvore carregada sob demanda.
 - Mostra tamanho, importância estimada e motivo da classificação.
+- Busca por nome ou extensão dentro da pasta aberta.
+- Filtra por importância e tamanho mínimo, com ordenação por nome ou tamanho.
+- Oferece acesso rápido aos arquivos de baixa importância sem ocultar a navegação por pastas.
 - Continua navegando quando encontra pastas sem permissão.
 - Permite selecionar e revisar vários arquivos antes de qualquer ação.
 - Exclui o lote após uma única confirmação `Sim/Não`.
@@ -23,7 +26,7 @@ Aplicativo desktop para entender e recuperar armazenamento no Windows sem apagar
 - Abre armazenamento, inicialização, Gerenciador de Tarefas e otimização de unidades do Windows.
 - Oferece uma aba de funções com ajustes oficiais de inicialização, jogos, efeitos visuais, diagnóstico, notificações e recursos opcionais.
 - Mostra capacidade, uso e espaço livre consolidados.
-- Atalhos: `Ctrl+F` abre a busca de aplicativos; `F5` atualiza a aba atual.
+- Atalhos: `Ctrl+F` abre a busca da aba atual; `F5` atualiza a aba atual.
 
 ## Classificação
 
@@ -62,7 +65,7 @@ O executável será criado em `dist\Optimizer.exe`.
 
 ## Próximas etapas
 
-1. Localizar arquivos grandes e antigos com filtros.
+1. Adicionar busca recursiva cancelável, filtro por data e categorias de arquivo.
 2. Detectar duplicados por hash em duas etapas.
 3. Relacionar resíduos fora da pasta de instalação ao aplicativo proprietário.
 4. Criar diário de operações e pontos de restauração quando suportados.

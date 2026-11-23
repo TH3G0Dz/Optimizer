@@ -1,5 +1,14 @@
 # Roadmap de otimização
 
+## Incluído na versão 0.6
+
+- Busca por nome ou extensão na pasta aberta.
+- Filtros de importância e tamanho mínimo.
+- Ordenação por nome, maior primeiro ou menor primeiro.
+- Atalho para reencontrar arquivos de baixa importância.
+- Pastas continuam visíveis ao filtrar arquivos, preservando a navegação.
+- Contador de resultados visíveis e totais.
+
 ## Incluído na versão 0.5
 
 - Seleção múltipla, revisão em lote e uma confirmação de exclusão.
@@ -19,16 +28,21 @@
 
 ## Próxima versão
 
-1. Localizar arquivos grandes e antigos com filtros claros.
-2. Detectar duplicados primeiro por tamanho e depois por hash.
-3. Medir espaço recuperável por categoria antes de qualquer ação.
-4. Criar diário de operações para auditoria e desfazer ações compatíveis.
-5. Detectar resíduos adicionais fora da pasta oficial com confiança verificável.
-6. Paginar pastas com centenas de milhares de entradas.
+1. Busca recursiva com progresso, cancelamento e exclusões configuráveis.
+2. Filtrar por data de modificação e categoria de arquivo.
+3. Salvar pesquisas frequentes e reabrir o último local.
+4. Detectar duplicados primeiro por tamanho e depois por hash.
+5. Medir espaço recuperável por categoria antes de qualquer ação.
+6. Criar diário de operações para auditoria e desfazer ações compatíveis.
+7. Detectar resíduos adicionais fora da pasta oficial com confiança verificável.
+8. Paginar pastas com centenas de milhares de entradas.
 
 ## Novas ideias priorizadas
 
 - **Mapa de espaço:** treemap local para localizar áreas grandes sem abrir pasta por pasta.
+- **Tipos rápidos:** documentos, imagens, vídeos, compactados, instaladores e temporários.
+- **Pesquisas salvas:** combinar pasta, importância, tamanho, idade e tipo sem reconfigurar filtros.
+- **Prévia contextual:** mostrar data, extensão, proprietário e última modificação antes da revisão.
 - **Receitas seguras:** caches conhecidos, miniaturas, relatórios de falha e instaladores antigos.
 - **Duplicados em duas etapas:** tamanho primeiro; hash somente nos candidatos.
 - **Impacto de inicialização:** combinar estado, publicador e impacto medido pelo Windows.

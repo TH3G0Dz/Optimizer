@@ -16,8 +16,8 @@ from .apps import (
 )
 from .cleanup import delete_files, review_files
 from .importance import classify
-from .models import AppInventory, InstalledApp, SystemFeature
-from .scanner import format_size, list_children, list_drives
+from .models import AppInventory, Importance, InstalledApp, SystemFeature
+from .scanner import filter_entries, format_size, list_children, list_drives
 from .system import (
     list_drive_usage,
     list_system_features,
@@ -29,6 +29,15 @@ from .system import (
 )
 from .theme import apply_theme
 
+FILE_IMPORTANCE_OPTIONS = ("Todas", "Baixo", "Revisar", "Médio", "Alto", "Crítico")
+FILE_SIZE_OPTIONS = {
+    "Qualquer tamanho": 0,
+    "1 MB+": 1024**2,
+    "100 MB+": 100 * 1024**2,
+    "1 GB+": 1024**3,
+}
+FILE_SORT_OPTIONS = ("Nome", "Maior primeiro", "Menor primeiro")
+
 
 class OptimizerApp(tk.Tk):
     def __init__(self) -> None:
@@ -39,6 +48,14 @@ class OptimizerApp(tk.Tk):
         self.minsize(960, 620)
         self.paths: dict[str, Path] = {}
         self.loaded: set[str] = set()
+        self.folder_items: set[str] = set()
+        self.folder_requests: dict[str, int] = {}
+        self.active_folder_item: str | None = None
+        self.file_query = tk.StringVar()
+        self.file_importance = tk.StringVar(value=FILE_IMPORTANCE_OPTIONS[0])
+        self.file_minimum_size = tk.StringVar(value=next(iter(FILE_SIZE_OPTIONS)))
+        self.file_sort = tk.StringVar(value=FILE_SORT_OPTIONS[0])
+        self.files_count = tk.StringVar(value="Abra uma pasta para filtrar.")
         self.apps_by_item: dict[str, InstalledApp] = {}
         self.pending_leftovers: dict[str, InstalledApp] = {}
         self.features_by_item: dict[str, SystemFeature] = {}
@@ -135,20 +152,80 @@ class OptimizerApp(tk.Tk):
             "Explorador seguro",
             "Abra pastas sob demanda. A importância explica o risco antes da ação.",
         )
-        actions = ttk.Frame(parent, style="Surface.TFrame", padding=10)
-        actions.pack(fill="x", pady=(0, 10))
+        filters = ttk.Frame(parent, style="Surface.TFrame", padding=10)
+        filters.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters, text="Buscar", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        self.file_search = ttk.Entry(filters, textvariable=self.file_query, width=25)
+        self.file_search.pack(side="left", padx=(0, 10))
+        ttk.Label(filters, text="Importância", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        importance_filter = ttk.Combobox(
+            filters,
+            textvariable=self.file_importance,
+            values=FILE_IMPORTANCE_OPTIONS,
+            state="readonly",
+            width=10,
+        )
+        importance_filter.pack(side="left", padx=(0, 10))
+        ttk.Label(filters, text="Tamanho", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        size_filter = ttk.Combobox(
+            filters,
+            textvariable=self.file_minimum_size,
+            values=tuple(FILE_SIZE_OPTIONS),
+            state="readonly",
+            width=17,
+        )
+        size_filter.pack(side="left", padx=(0, 10))
+        ttk.Label(filters, text="Ordenar", style="SurfaceMuted.TLabel").pack(
+            side="left", padx=(0, 7)
+        )
+        sort_filter = ttk.Combobox(
+            filters,
+            textvariable=self.file_sort,
+            values=FILE_SORT_OPTIONS,
+            state="readonly",
+            width=15,
+        )
+        sort_filter.pack(side="left")
+        ttk.Label(
+            filters, textvariable=self.files_count, style="SurfaceMuted.TLabel"
+        ).pack(side="right")
+
+        actions = ttk.Frame(parent, padding=(0, 0, 0, 9))
+        actions.pack(fill="x")
+        ttk.Button(
+            actions,
+            text="Aplicar na pasta atual",
+            command=self._apply_file_filters,
+            style="Primary.TButton",
+        ).pack(side="left")
+        ttk.Button(
+            actions,
+            text="Mostrar baixa importância",
+            command=self._show_low_importance,
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            actions,
+            text="Limpar filtros",
+            command=self._clear_file_filters,
+        ).pack(side="left", padx=4)
         self.review_button = ttk.Button(
             actions,
             text="Revisar arquivos selecionados",
             command=self._review_selected,
             state="disabled",
-            style="Primary.TButton",
+            style="Danger.TButton",
         )
-        self.review_button.pack(side="left")
+        self.review_button.pack(side="left", padx=(12, 0))
         ttk.Label(
             actions,
             text="Pastas, atalhos e áreas críticas permanecem protegidos.",
-            style="SurfaceMuted.TLabel",
+            style="Muted.TLabel",
         ).pack(side="right")
 
         tree_frame = ttk.Frame(parent)
@@ -171,6 +248,10 @@ class OptimizerApp(tk.Tk):
         self._place_tree(tree_frame, self.file_tree)
         self.file_tree.bind("<<TreeviewOpen>>", self._on_open)
         self.file_tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.file_search.bind("<Return>", self._apply_file_filters)
+        importance_filter.bind("<<ComboboxSelected>>", self._apply_file_filters)
+        size_filter.bind("<<ComboboxSelected>>", self._apply_file_filters)
+        sort_filter.bind("<<ComboboxSelected>>", self._apply_file_filters)
 
     def _build_apps_tab(self, parent: ttk.Frame) -> None:
         self._section_header(
@@ -376,27 +457,54 @@ class OptimizerApp(tk.Tk):
                 tags=(result.importance.value,),
             )
             self.paths[item] = drive
+            self.folder_items.add(item)
             self.file_tree.insert(item, "end", text="Carregando...")
 
     def _on_open(self, _event=None) -> None:
-        item = self.file_tree.focus()
-        if not item or item in self.loaded or item not in self.paths:
+        self._load_folder(self.file_tree.focus())
+
+    def _load_folder(self, item: str, *, force: bool = False) -> None:
+        if (
+            not item
+            or not self.file_tree.exists(item)
+            or item not in self.folder_items
+            or item not in self.paths
+            or (item in self.loaded and not force)
+        ):
             return
         self.loaded.add(item)
+        self.active_folder_item = item
+        request = self.folder_requests.get(item, 0) + 1
+        self.folder_requests[item] = request
+        self.files_count.set("Lendo pasta...")
         self.status.set(f"Lendo {self.paths[item]}...")
         threading.Thread(
-            target=self._read_folder, args=(item, self.paths[item]), daemon=True
+            target=self._read_folder,
+            args=(item, self.paths[item], request),
+            daemon=True,
         ).start()
 
-    def _read_folder(self, item: str, path: Path) -> None:
+    def _read_folder(self, item: str, path: Path, request: int) -> None:
         try:
             entries = list_children(path)
-            self.after(0, self._show_entries, item, entries, None)
+            self.after(0, self._show_entries, item, entries, None, request)
         except OSError as error:
-            self.after(0, self._show_entries, item, [], str(error))
+            self.after(0, self._show_entries, item, [], str(error), request)
 
-    def _show_entries(self, parent: str, entries: list, error: str | None) -> None:
+    def _show_entries(
+        self,
+        parent: str,
+        entries: list,
+        error: str | None,
+        request: int,
+    ) -> None:
+        if (
+            not self.file_tree.exists(parent)
+            or self.folder_requests.get(parent) != request
+        ):
+            return
         for child in self.file_tree.get_children(parent):
+            self._forget_tree_item(child)
             self.file_tree.delete(child)
         if error:
             self.loaded.discard(parent)
@@ -404,8 +512,24 @@ class OptimizerApp(tk.Tk):
                 parent, "end", text="Acesso indisponível", values=("", "Revisar", error)
             )
             self.status.set(error)
+            self.files_count.set("Pasta indisponível")
             return
-        for entry in entries:
+        selected_importance = next(
+            (
+                importance
+                for importance in Importance
+                if importance.value == self.file_importance.get()
+            ),
+            None,
+        )
+        visible = filter_entries(
+            entries,
+            query=self.file_query.get(),
+            importance=selected_importance,
+            minimum_size=FILE_SIZE_OPTIONS[self.file_minimum_size.get()],
+            sort_by=self.file_sort.get(),
+        )
+        for entry in visible:
             item = self.file_tree.insert(
                 parent,
                 "end",
@@ -419,8 +543,59 @@ class OptimizerApp(tk.Tk):
             )
             self.paths[item] = entry.path
             if entry.is_dir:
+                self.folder_items.add(item)
                 self.file_tree.insert(item, "end", text="Carregando...")
-        self.status.set(f"{len(entries)} itens em {self.paths[parent]}")
+        self.active_folder_item = parent
+        self.files_count.set(f"{len(visible)} de {len(entries)} itens")
+        self.status.set(
+            f"{len(visible)} de {len(entries)} itens em {self.paths[parent]}"
+        )
+
+    def _forget_tree_item(self, item: str) -> None:
+        if self.file_tree.exists(item):
+            for child in self.file_tree.get_children(item):
+                self._forget_tree_item(child)
+        self.paths.pop(item, None)
+        self.loaded.discard(item)
+        self.folder_items.discard(item)
+        self.folder_requests.pop(item, None)
+        if self.active_folder_item == item:
+            self.active_folder_item = None
+
+    def _current_folder_item(self) -> str | None:
+        item = self.file_tree.focus()
+        while item and item not in self.folder_items:
+            item = self.file_tree.parent(item)
+        if item:
+            return item
+        if self.active_folder_item and self.file_tree.exists(self.active_folder_item):
+            return self.active_folder_item
+        return None
+
+    def _apply_file_filters(self, _event=None) -> None:
+        item = self._current_folder_item()
+        if not item:
+            self.status.set("Abra ou selecione uma pasta antes de aplicar os filtros.")
+            return
+        for child in self.file_tree.get_children(item):
+            self._forget_tree_item(child)
+            self.file_tree.delete(child)
+        self.loaded.discard(item)
+        self.file_tree.insert(item, "end", text="Carregando...")
+        self.file_tree.item(item, open=True)
+        self._load_folder(item, force=True)
+
+    def _show_low_importance(self) -> None:
+        self.file_importance.set(Importance.LOW.value)
+        self.file_minimum_size.set(next(iter(FILE_SIZE_OPTIONS)))
+        self._apply_file_filters()
+
+    def _clear_file_filters(self) -> None:
+        self.file_query.set("")
+        self.file_importance.set(FILE_IMPORTANCE_OPTIONS[0])
+        self.file_minimum_size.set(next(iter(FILE_SIZE_OPTIONS)))
+        self.file_sort.set(FILE_SORT_OPTIONS[0])
+        self._apply_file_filters()
 
     def _on_select(self, _event=None) -> None:
         selected = self.file_tree.selection()
@@ -543,7 +718,7 @@ class OptimizerApp(tk.Tk):
         for item in items:
             path = self.paths.get(item)
             if path and path.resolve() in deleted_set:
-                self.paths.pop(item, None)
+                self._forget_tree_item(item)
                 self.file_tree.delete(item)
         self.status.set(
             f"{len(deleted)} arquivo(s) excluído(s); {len(failures)} falha(s)."
@@ -818,9 +993,13 @@ class OptimizerApp(tk.Tk):
             messagebox.showerror("Optimizer", str(error), parent=self)
 
     def _focus_app_search(self, _event=None) -> str:
-        self.notebook.select(1)
-        self.app_search.focus_set()
-        self.app_search.selection_range(0, "end")
+        if self.notebook.index("current") == 0:
+            self.file_search.focus_set()
+            self.file_search.selection_range(0, "end")
+        else:
+            self.notebook.select(1)
+            self.app_search.focus_set()
+            self.app_search.selection_range(0, "end")
         return "break"
 
     def _refresh_active_view(self, _event=None) -> str:
@@ -829,6 +1008,10 @@ class OptimizerApp(tk.Tk):
             self.file_tree.delete(*self.file_tree.get_children())
             self.paths.clear()
             self.loaded.clear()
+            self.folder_items.clear()
+            self.folder_requests.clear()
+            self.active_folder_item = None
+            self.files_count.set("Abra uma pasta para filtrar.")
             self._load_drives()
             self.status.set("Unidades atualizadas.")
         elif current == 1:
